@@ -1,7 +1,9 @@
 {
-  "name": "hotstar-vercel",
-  "version": "1.0.0",
-  "dependencies": {
-    "node-fetch": "^2.6.12"
-  }
+  "version": 2,
+  "builds": [
+    { "src": "api/*.js", "use": "@vercel/node" }
+  ],
+  "routes": [
+    { "src": "/proxy", "dest": "/api/proxy.js" }
+  ]
 }
