@@ -14,12 +14,12 @@
     if(Hls.isSupported()) {
       const video = document.getElementById('video');
       const hls = new Hls();
-      hls.loadSource("/api/proxy?url=" + encodeURIComponent(m3u8Url));
+      hls.loadSource("/proxy?url=" + encodeURIComponent(m3u8Url));
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
     } else {
       const video = document.getElementById('video');
-      video.src = "/api/proxy?url=" + encodeURIComponent(m3u8Url);
+      video.src = "/proxy?url=" + encodeURIComponent(m3u8Url);
       video.play();
     }
   </script>
