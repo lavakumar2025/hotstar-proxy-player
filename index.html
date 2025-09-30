@@ -5,24 +5,23 @@
   <title>Hotstar Proxy Player</title>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
-<body style="background:#000; color:#fff; margin:0;">
+<body style="background:#000; color:#fff;">
   <video id="video" width="100%" height="500" controls autoplay></video>
 
   <script>
-    const video = document.getElementById("video");
-    const src =
-      "/api/proxy?url=" +
-      encodeURIComponent(
-        "https://live09p.hotstar.com/mp2/inallow-bigboss-tel-s9-24x7/09fbd2b8ff2e46cd831588befd841493/index_7.m3u8"
-      );
+    const hlsUrl = "https://live09p.hotstar.com/mp2/inallow-bigboss-tel-s9-24x7/09fbd2b8ff2e46cd831588befd841493/index_7.m3u8";
 
     if (Hls.isSupported()) {
+      const video = document.getElementById('video');
       const hls = new Hls();
-      hls.loadSource(src);
+      hls.loadSource(`/api/proxy?url=${encodeURIComponent(hlsUrl)}`);
       hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
-    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = src;
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        video.play();
+      });
+    } else {
+      const video = document.getElementById('video');
+      video.src = `/api/proxy?url=${encodeURIComponent(hlsUrl)}`;
       video.play();
     }
   </script>
