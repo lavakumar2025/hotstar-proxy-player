@@ -36,7 +36,7 @@ if (strpos($url, ".m3u8") !== false) {
             if (strpos($line, "http") !== 0) {
                 $line = $base . $line;
             }
-            $line = "api/proxy.php?url=" . urlencode($line);
+            $line = "/api/proxy.php?url=" . urlencode($line);
         }
     }
     $response = implode("\n", $lines);
