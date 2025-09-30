@@ -9,17 +9,20 @@
   <video id="video" width="100%" height="500" controls autoplay></video>
 
   <script>
-    const m3u8Url = "https://live09p.hotstar.com/mp2/inallow-bigboss-tel-s9-24x7/09fbd2b8ff2e46cd831588befd841493/index_7.m3u8";
-
     if(Hls.isSupported()) {
-      const video = document.getElementById('video');
-      const hls = new Hls();
-      hls.loadSource("/proxy?url=" + encodeURIComponent(m3u8Url));
+      var video = document.getElementById('video');
+      var hls = new Hls();
+      hls.loadSource("/proxy?url=" + encodeURIComponent(
+        "https://live09p.hotstar.com/mp2/inallow-bigboss-tel-s9-24x7/09fbd2b8ff2e46cd831588befd841493/index_7.m3u8"
+      ));
       hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
-    } else {
-      const video = document.getElementById('video');
-      video.src = "/proxy?url=" + encodeURIComponent(m3u8Url);
+      hls.on(Hls.Events.MANIFEST_PARSED,function() {
+        video.play();
+      });
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = "/proxy.php?url=" + encodeURIComponent(
+        "https://live09p.hotstar.com/mp2/inallow-bigboss-tel-s9-24x7/09fbd2b8ff2e46cd831588befd841493/index_7.m3u8"
+      );
       video.play();
     }
   </script>
