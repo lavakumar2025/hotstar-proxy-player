@@ -1,9 +1,6 @@
 {
   "name": "hotstar-vercel",
   "version": "1.0.0",
-  "scripts": {
-    "start": "vercel dev"
-  },
   "dependencies": {
     "node-fetch": "^2.6.12"
   }
