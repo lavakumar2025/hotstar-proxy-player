@@ -18,10 +18,10 @@ $headers = [
     "User-Agent: Hotstar;in.startv.hotstar.links_macha_official(Android/15)",
     "Cookie: hdntl=exp=1759269007~acl=%2f*~id=c40a5e786ea713d5f9bb6e3d0a86e57d~data=hdntl~hmac=fbf8d61f477cf406a086bc0ea61cd5994e2a577788586c4543f5ffe561c6fe34"
 ];
-curl_setopt($ch, CURLOPT_HTTPSHEADER, $headers);
+curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
 $response = curl_exec($ch);
-$httpscode = curl_getinfo($ch, CURLINFO_HTTPS_CODE);
+$httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 $content_type = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
 curl_close($ch);
 
@@ -33,7 +33,7 @@ if (strpos($url, ".m3u8") !== false) {
         $line = trim($line);
         if ($line !== "" && strpos($line, "#") !== 0) {
             // rewrite chunk url through proxy
-            if (strpos($line, "https") !== 0) {
+            if (strpos($line, "http") !== 0) {
                 $line = $base . $line;
             }
             $line = "/api/proxy.php?url=" . urlencode($line);
@@ -45,6 +45,6 @@ if (strpos($url, ".m3u8") !== false) {
     header("Content-Type: " . $content_type);
 }
 
-https_response_code($httpscode);
+http_response_code($httpcode);
 echo $response;
 ?>
