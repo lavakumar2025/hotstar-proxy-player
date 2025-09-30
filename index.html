@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Hotstar Proxy Player</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+<body style="background:#000; color:#fff; margin:0;">
+  <video id="video" width="100%" height="500" controls autoplay></video>
+
+  <script>
+    const video = document.getElementById("video");
+    const src =
+      "/api/proxy?url=" +
+      encodeURIComponent(
+        "https://live09p.hotstar.com/mp2/inallow-bigboss-tel-s9-24x7/09fbd2b8ff2e46cd831588befd841493/index_7.m3u8"
+      );
+
+    if (Hls.isSupported()) {
+      const hls = new Hls();
+      hls.loadSource(src);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = src;
+      video.play();
+    }
+  </script>
+</body>
+</html>
