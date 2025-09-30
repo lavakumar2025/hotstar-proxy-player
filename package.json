@@ -1,5 +1,5 @@
 {
-  "name": "hotstar-vercel",
+  "name": "hotstar-proxy-player",
   "version": "1.0.0",
   "dependencies": {
     "node-fetch": "^2.6.12"
