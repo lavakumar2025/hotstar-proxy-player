@@ -31,7 +31,7 @@ export default async function handler(req, res) {
             if (!line.startsWith("http")) {
               line = base + line;
             }
-            line = req.headers.origin + "/proxy?url=" + encodeURIComponent(line);
+            line = req.headers.origin + "/api/proxy?url=" + encodeURIComponent(line);
           }
           return line;
         })
