@@ -12,18 +12,13 @@
     if(Hls.isSupported()) {
       var video = document.getElementById('video');
       var hls = new Hls();
-      hls.loadSource("/api/proxy.php?url=" + encodeURIComponent(
+      hls.loadSource("/proxy.php?url=" + encodeURIComponent(
         "https://live09p.hotstar.com/mp2/inallow-bigboss-tel-s9-24x7/09fbd2b8ff2e46cd831588befd841493/index_7.m3u8"
       ));
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED,function() {
         video.play();
       });
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = "/api/proxy.php?url=" + encodeURIComponent(
-        "https://live09p.hotstar.com/mp2/inallow-bigboss-tel-s9-24x7/09fbd2b8ff2e46cd831588befd841493/index_7.m3u8"
-      );
-      video.play();
     }
   </script>
 </body>
