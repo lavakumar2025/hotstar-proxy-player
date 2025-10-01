@@ -1,13 +1,17 @@
 <?php
+// proxy.php
 if (!isset($_GET['url'])) {
     die("Missing url parameter");
 }
+
 $url = $_GET['url'];
 
+// Initialize cURL
 $ch = curl_init($url);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_HEADER, false);
 
+// Required headers for Hotstar
 $headers = [
     "Origin: https://www.hotstar.com",
     "Referer: https://www.hotstar.com/",
@@ -21,6 +25,7 @@ $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 $content_type = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
 curl_close($ch);
 
+// If m3u8 playlist, rewrite chunk URLs
 if (strpos($url, ".m3u8") !== false) {
     $base = dirname($url) . "/";
     $lines = explode("\n", $response);
@@ -30,7 +35,7 @@ if (strpos($url, ".m3u8") !== false) {
             if (strpos($line, "http") !== 0) {
                 $line = $base . $line;
             }
-            $line = "/proxy.php?url=" . urlencode($line);
+            $line = "proxy.php?url=" . urlencode($line);
         }
     }
     $response = implode("\n", $lines);
@@ -41,3 +46,4 @@ if (strpos($url, ".m3u8") !== false) {
 
 http_response_code($httpcode);
 echo $response;
+?>
