@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hotstar Proxy Player</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<style>
+  body { background:#000; color:#fff; font-family:sans-serif; }
+  #video { width:100%; max-width:900px; height:500px; background:#000; }
+  #controls { margin:20px 0; }
+  input { width:70%; padding:8px; }
+  button { padding:8px 12px; }
+</style>
+</head>
+<body>
+
+<h2>Hotstar Proxy Player</h2>
+<div id="controls">
+  <input id="urlInput" type="text" placeholder="Paste URL|Cookie here" />
+  <button id="playBtn">Play</button>
+</div>
+<video id="video" controls autoplay></video>
+
+<script>
+const urlInput = document.getElementById('urlInput');
+const playBtn = document.getElementById('playBtn');
+const video = document.getElementById('video');
+
+// remember last URL
+if(localStorage.getItem('lastHotstarURL')) {
+  urlInput.value = localStorage.getItem('lastHotstarURL');
+}
+
+playBtn.addEventListener('click', () => {
+  const raw = urlInput.value.trim();
+  if(!raw) return alert('Please paste a URL');
+
+  localStorage.setItem('lastHotstarURL', raw);
+
+  let [url, cookie] = raw.split('|');
+  url = url.trim();
+  cookie = cookie ? cookie.trim() : '';
+
+  const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}&cookie=${encodeURIComponent(cookie)}`;
+
+  if(Hls.isSupported()) {
+    const hls = new Hls();
+    hls.loadSource(proxyUrl);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+  } else if(video.canPlayType('application/vnd.apple.mpegurl')) {
+    video.src = proxyUrl;
+    video.play();
+  }
+});
+</script>
+
+</body>
+</html>
