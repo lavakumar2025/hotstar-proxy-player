@@ -1,9 +1,9 @@
 {
   "version": 2,
-  "builds": [
-    { "src": "api/live25.php", "use": "@vercel/php" }
-  ],
+  "functions": {
+    "api/live25.js": { "runtime": "nodejs18.x" }
+  },
   "routes": [
-    { "src": "/(.*)", "dest": "/api/live25.php" }
+    { "src": "/(.*)", "dest": "/api/live25.js" }
   ]
 }
