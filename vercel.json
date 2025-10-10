@@ -1,9 +1,9 @@
 {
   "version": 2,
   "builds": [
-    { "src": "public/live25.php", "use": "@vercel/php" }
+    { "src": "api/live25.php", "use": "@vercel/php" }
   ],
   "routes": [
-    { "src": "/(.*)", "dest": "/public/live25.php" }
+    { "src": "/(.*)", "dest": "/api/live25.php" }
   ]
 }
