@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Hotstar Proxy Player</title>
+  <title>Smart Proxy Player</title>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <style>
     body {
@@ -14,15 +14,16 @@
       height: 100vh;
       color: white;
       font-family: Arial, sans-serif;
+      overflow: hidden;
     }
     video {
       width: 90%;
       max-width: 1000px;
       border-radius: 12px;
-      box-shadow: 0 0 30px rgba(255,255,255,0.2);
       background: #111;
+      box-shadow: 0 0 25px rgba(255,255,255,0.15);
     }
-    .loading {
+    #loading {
       position: absolute;
       top: 50%;
       left: 50%;
@@ -33,51 +34,68 @@
   </style>
 </head>
 <body>
+  <div id="loading">Fetching master playlist...</div>
+  <video id="player" controls autoplay muted></video>
 
-<div class="loading" id="loading">Loading stream...</div>
-<video id="player" controls autoplay muted></video>
+  <script>
+  const video = document.getElementById("player");
+  const loading = document.getElementById("loading");
 
-<script>
-const video = document.getElementById('player');
-const loading = document.getElementById('loading');
+  // MASTER PLAYLIST URL
+  const masterUrl = "https://bb4.xojef51292.workers.dev/tamilbulb/live/stream.m3u8?id=84733b8bb5";
+  const proxyBase = "https://hotstar-proxy-player.vercel.app/api/proxy?url=";
 
-// the real stream URL
-const realM3u8 = "https://bb4.xojef51292.workers.dev/tamilbulb/live/stream.m3u8?id=84733b8bb5";
+  // Step 1. Fetch master playlist via proxy
+  fetch(proxyBase + encodeURIComponent(masterUrl))
+    .then(r => r.text())
+    .then(text => {
+      // Step 2. Parse playlist lines
+      const lines = text.split("\n").filter(l => l.includes("stream.m3u8?chunks="));
+      if (lines.length === 0) throw new Error("No variant streams found!");
 
-// pass the real URL through your proxy
-const proxyUrl = `https://hotstar-proxy-player.vercel.app/api/proxy?url=${encodeURIComponent(realM3u8)}`;
+      // Step 3. Prefer 1080p > 720p > others
+      let best = lines.find(l => l.includes("full")) ||
+                 lines.find(l => l.includes("hd")) ||
+                 lines[0];
 
-if (Hls.isSupported()) {
-  const hls = new Hls({
-    xhrSetup: function(xhr, url) {
-      // proxy each sub-request through Vercel
-      const proxied = `https://hotstar-proxy-player.vercel.app/api/proxy?url=${encodeURIComponent(url)}`;
-      xhr.open('GET', proxied, true);
-    }
-  });
+      // Step 4. Build full chunk URL
+      const base = masterUrl.split("?")[0]; // remove ?id=...
+      const finalChunk = base + "?" + best.split("?")[1];
 
-  hls.loadSource(proxyUrl);
-  hls.attachMedia(video);
+      console.log("Selected chunk:", finalChunk);
 
-  hls.on(Hls.Events.MANIFEST_PARSED, () => {
-    loading.style.display = 'none';
-    video.play();
-  });
+      // Step 5. Play using Hls.js via proxy
+      const proxiedChunk = proxyBase + encodeURIComponent(finalChunk);
 
-  hls.on(Hls.Events.ERROR, (event, data) => {
-    console.error('HLS error:', data);
-    loading.textContent = "Error loading stream.";
-  });
-
-} else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-  // For Safari
-  video.src = proxyUrl;
-  video.addEventListener('loadedmetadata', () => {
-    loading.style.display = 'none';
-    video.play();
-  });
-}
-</script>
-
+      if (Hls.isSupported()) {
+        const hls = new Hls({
+          xhrSetup: function(xhr, url) {
+            const proxied = proxyBase + encodeURIComponent(url);
+            xhr.open('GET', proxied, true);
+          }
+        });
+        hls.loadSource(proxiedChunk);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          loading.style.display = "none";
+          video.play();
+        });
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          console.error("HLS Error:", data);
+          loading.textContent = "Stream error: " + data.details;
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = proxiedChunk;
+        video.addEventListener('loadedmetadata', () => {
+          loading.style.display = "none";
+          video.play();
+        });
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      loading.textContent = "Error loading master playlist.";
+    });
+  </script>
 </body>
 </html>
