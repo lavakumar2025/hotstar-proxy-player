@@ -6,9 +6,8 @@ export default async function handler(req, res) {
     if (!targetUrl) return res.status(400).send("Missing url parameter");
 
     const headers = {
-      "Origin": "https://www.hotstar.com",
-      "Referer": "https://www.hotstar.com/",
-      "Cookie": "hdntl=exp=1761013206~acl=%2f*~id=517628d9e7b1ac9fab2b951b1c5e06b5~data=hdntl~hmac=ebe16281b821bb06959658e88b3a6ffd9e30922625b4b2f27903620c978495f8",
+      "Origin": "https://jio.yupptv.online",
+      "Referer": "https://jio.yupptv.online/",
       "User-Agent": "Hotstar",
       "Accept": "*/*",
       "Connection": "keep-alive"
