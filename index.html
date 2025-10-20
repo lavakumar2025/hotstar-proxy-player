@@ -1,42 +1,81 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Live Player</title>
-<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-<style>
-  body {
-    margin: 0;
-    background: #000;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-  }
-  video {
-    width: 80%;
-    max-width: 900px;
-    border-radius: 12px;
-    box-shadow: 0 0 20px rgba(255,255,255,0.2);
-  }
-</style>
+  <meta charset="UTF-8">
+  <title>Hotstar Proxy Player</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      color: white;
+      font-family: Arial, sans-serif;
+    }
+    video {
+      width: 90%;
+      max-width: 1000px;
+      border-radius: 12px;
+      box-shadow: 0 0 30px rgba(255,255,255,0.2);
+      background: #111;
+    }
+    .loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 18px;
+      opacity: 0.8;
+    }
+  </style>
 </head>
 <body>
 
-<video id="player" controls autoplay></video>
+<div class="loading" id="loading">Loading stream...</div>
+<video id="player" controls autoplay muted></video>
 
 <script>
 const video = document.getElementById('player');
-const src = `/api/proxy?url=${encodeURIComponent("https://bb4.xojef51292.workers.dev/tamilbulb/live/stream.m3u8?id=84733b8bb5")}`;
+const loading = document.getElementById('loading');
+
+// the real stream URL
+const realM3u8 = "https://bb3.rixeh78955.workers.dev/tamilbulb/live/stream.m3u8?chunks=53a65460700ea181e1d90d6b6a08e8fb34076278cb5d01e7b8d5f714135897d2b1093815c648e66f868052447bd4c3c2aea47e4a240662af600bb61b6e5c0bea76bf9e0427cde741ce1710fe4d59361d99cc299f594d1d1cdb44c4b22b8732a0ee3320a35a3012548055b77954b91b3b22688ffb9fb5ce3554f3b770fa396bf80b6b2d00985aee5d21b8a68edf2a26da7c1160c34dd964ec6ba15e4b4fdb096cf21fb88fa6de8714c09e5b7b59fea0bb56891cd36c67814cadbc919f3827164492bd546d4016864185dcef26c6713f41";
+
+// pass the real URL through your proxy
+const proxyUrl = `https://hotstar-proxy-player.vercel.app/api/proxy?url=${encodeURIComponent(realM3u8)}`;
 
 if (Hls.isSupported()) {
-  const hls = new Hls();
-  hls.loadSource(src);
+  const hls = new Hls({
+    xhrSetup: function(xhr, url) {
+      // proxy each sub-request through Vercel
+      const proxied = `https://hotstar-proxy-player.vercel.app/api/proxy?url=${encodeURIComponent(url)}`;
+      xhr.open('GET', proxied, true);
+    }
+  });
+
+  hls.loadSource(proxyUrl);
   hls.attachMedia(video);
-  hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+
+  hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    loading.style.display = 'none';
+    video.play();
+  });
+
+  hls.on(Hls.Events.ERROR, (event, data) => {
+    console.error('HLS error:', data);
+    loading.textContent = "Error loading stream.";
+  });
+
 } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-  video.src = src;
-  video.addEventListener('loadedmetadata', () => video.play());
+  // For Safari
+  video.src = proxyUrl;
+  video.addEventListener('loadedmetadata', () => {
+    loading.style.display = 'none';
+    video.play();
+  });
 }
 </script>
 
