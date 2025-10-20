@@ -35,6 +35,29 @@ export default async function handler(req, res) {
         return line;
       }).join("\n");
 
+// Inside your proxy.js, after fetching the chunk playlist
+if (contentType.includes("mpegurl") || bodyText.includes("#EXTM3U")) {
+  const baseProxy = "https://hotstar-proxy-player.vercel.app/api/proxy?url=";
+
+  const rewritten = bodyText.split("\n").map(line => {
+    if (!line || line.startsWith("#")) return line;
+
+    // Rewrite relative ts or chunk URLs to full proxy URLs
+    if (line.includes("stream.ts?segment=") || line.includes("stream.m3u8?chunks=")) {
+      return baseProxy + encodeURIComponent("https://bb4.xojef51292.workers.dev/tamilbulb/live/" + line);
+    }
+
+    return line;
+  }).join("\n");
+
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Content-Type", "application/vnd.apple.mpegurl; charset=utf-8");
+  res.status(200).send(rewritten);
+  return;
+}
+
+
+      
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Content-Type", "application/vnd.apple.mpegurl; charset=utf-8");
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
