@@ -1,10 +1,6 @@
 {
-  "version": 2,
-  "functions": {
-    "api/live25.js": { "runtime": "nodejs18.x" }
-  },
   "routes": [
-    { "src": "/(.*)", "dest": "/api/live25.js" }
     { "src": "/api/(.*)", "dest": "/api/$1.js" },
+    
   ]
 }
