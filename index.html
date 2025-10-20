@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Live Player</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<style>
+  body {
+    margin: 0;
+    background: #000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+  }
+  video {
+    width: 80%;
+    max-width: 900px;
+    border-radius: 12px;
+    box-shadow: 0 0 20px rgba(255,255,255,0.2);
+  }
+</style>
+</head>
+<body>
+
+<video id="player" controls autoplay></video>
+
+<script>
+const video = document.getElementById('player');
+const src = `/api/proxy?url=${encodeURIComponent("https://bb4.xojef51292.workers.dev/tamilbulb/live/stream.m3u8?id=84733b8bb5")}`;
+
+if (Hls.isSupported()) {
+  const hls = new Hls();
+  hls.loadSource(src);
+  hls.attachMedia(video);
+  hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+} else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+  video.src = src;
+  video.addEventListener('loadedmetadata', () => video.play());
+}
+</script>
+
+</body>
+</html>
