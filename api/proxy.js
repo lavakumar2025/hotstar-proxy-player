@@ -9,16 +9,20 @@ function buildForwardHeaders() {
     "Accept": "*/*",
     "Accept-Language": "en-US,en;q=0.9",
     "Connection": "keep-alive",
-    "Cookie": ""
   };
 }
 
 function resolveAbsoluteUrl(line, baseUrl) {
   try {
-    // If already absolute
+    // Already absolute (starts with http)
     if (/^https?:\/\//i.test(line)) return line;
-    // Otherwise resolve relative
-    return new URL(line, baseUrl).href;
+
+    // Otherwise, resolve relative to base URL
+    const base = new URL(baseUrl);
+    // e.g. base: https://bb5.eswj9cc7tq.workers.dev/tamilbulb/live/stream.m3u8?id=84733b8bb5
+    // We strip filename and keep directory for proper relative linking
+    const baseDir = base.href.substring(0, base.href.lastIndexOf("/") + 1);
+    return new URL(line, baseDir).href;
   } catch {
     return line;
   }
@@ -43,10 +47,9 @@ export default async function handler(req, res) {
 
     const contentType = upstream.headers.get("content-type") || "";
 
-    // --- Handle M3U8 Playlist ---
+    // --- If M3U8 playlist ---
     if (contentType.includes("mpegurl") || contentType.includes("vnd.apple.mpegurl")) {
       const bodyText = await upstream.text();
-      const baseUrl = targetUrl;
 
       const rewritten = bodyText
         .split(/\r?\n/)
@@ -54,10 +57,10 @@ export default async function handler(req, res) {
           const trimmed = line.trim();
           if (!trimmed || trimmed.startsWith("#")) return line;
 
-          // Convert relative to absolute
-          const absUrl = resolveAbsoluteUrl(trimmed, baseUrl);
+          // ✅ Make full absolute URL (fix)
+          const absUrl = resolveAbsoluteUrl(trimmed, targetUrl);
 
-          // Rewrite to proxy again
+          // ✅ Rewrite to proxy again
           return `/api/proxy?url=${encodeURIComponent(absUrl)}`;
         })
         .join("\n");
@@ -69,7 +72,7 @@ export default async function handler(req, res) {
       return;
     }
 
-    // --- Binary data (TS, AAC, etc.) ---
+    // --- Otherwise binary (TS, AAC, etc.) ---
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Content-Type", contentType);
     const upstreamCache = upstream.headers.get("cache-control");
