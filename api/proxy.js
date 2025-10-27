@@ -2,17 +2,14 @@ import fetch from "node-fetch";
 
 export default async function handler(req, res) {
   try {
-    // Get the real URL from query
     const targetUrl = req.query.url;
-
     if (!targetUrl) {
       return res.status(400).send("Missing ?url parameter");
     }
 
-    // Decode encoded URLs (like from encodeURIComponent)
     const decodedUrl = decodeURIComponent(targetUrl);
 
-    // Fetch with headers to simulate a real browser player
+    // Fetch the content
     const response = await fetch(decodedUrl, {
       headers: {
         "User-Agent":
@@ -24,13 +21,21 @@ export default async function handler(req, res) {
       },
     });
 
-    // Clone content-type
-    const contentType = response.headers.get("content-type") || "application/octet-stream";
+    const contentType =
+      response.headers.get("content-type") || "application/octet-stream";
 
-    // Special: rewrite relative .ts/.m3u8 URLs inside playlists
-    let data = await response.text();
-    if (contentType.includes("application/vnd.apple.mpegurl") || contentType.includes("mpegurl")) {
-      // Fix relative segment URLs
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Content-Type", contentType);
+
+    // ✅ Handle .m3u8 or .m3u8?chunks= files (playlist text)
+    if (
+      contentType.includes("application/vnd.apple.mpegurl") ||
+      contentType.includes("mpegurl") ||
+      decodedUrl.includes(".m3u8")
+    ) {
+      let data = await response.text();
+
+      // Rewrite any relative .ts or .m3u8 URLs inside the playlist
       data = data.replace(
         /(\n)(?!https?:\/\/)([^#\n]+\.m3u8[^ \n]*|[^#\n]+\.ts[^ \n]*)/g,
         (match, p1, p2) => {
@@ -39,17 +44,12 @@ export default async function handler(req, res) {
         }
       );
 
-      res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
-      res.setHeader("Cache-Control", "no-store");
       return res.status(200).send(data);
     }
 
-    // For .ts or other binary content
+    // ✅ Handle binary data (.ts or others)
     const buffer = Buffer.from(await response.arrayBuffer());
-    res.setHeader("Content-Type", contentType);
-    res.setHeader("Cache-Control", "no-store");
     return res.status(200).send(buffer);
-
   } catch (err) {
     console.error("Proxy error:", err);
     return res.status(500).send("Proxy failed: " + err.message);
