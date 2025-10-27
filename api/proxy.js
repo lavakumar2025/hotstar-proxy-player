@@ -14,20 +14,11 @@ function buildForwardHeaders() {
 
 function resolveToAbsolute(line, baseUrl) {
   try {
-    if (/^https?:\/\//i.test(line)) return line; // already absolute
-    if (/^\/\//.test(line)) {
-      const base = new URL(baseUrl);
-      return `${base.protocol}${line}`;
-    }
+    if (/^https?:\/\//i.test(line)) return line;
     const base = new URL(baseUrl);
-    const origin = base.origin;
-    if (line.startsWith("/")) {
-      return origin + line;
-    }
-    const baseDir = origin + base.pathname.substring(0, base.pathname.lastIndexOf("/") + 1);
+    const baseDir = base.href.substring(0, base.href.lastIndexOf("/") + 1);
     return new URL(line, baseDir).href;
-  } catch (e) {
-    console.error("resolveToAbsolute error:", e);
+  } catch {
     return line;
   }
 }
@@ -35,47 +26,73 @@ function resolveToAbsolute(line, baseUrl) {
 export default async function handler(req, res) {
   try {
     const targetUrl = req.query.url || req.url.split("?url=")[1];
-    if (!targetUrl) {
-      return res.status(400).send("Missing url parameter");
-    }
+    if (!targetUrl) return res.status(400).send("Missing url parameter");
 
     const decodedUrl = decodeURIComponent(targetUrl);
     const headers = buildForwardHeaders();
-    const upstream = await fetch(decodedUrl, { headers });
+    const response = await fetch(decodedUrl, { headers });
 
-    if (!upstream.ok) {
-      const text = await upstream.text().catch(() => "");
-      return res.status(upstream.status).send(`Upstream error ${upstream.status}: ${text || upstream.statusText}`);
+    if (!response.ok) {
+      const txt = await response.text().catch(() => "");
+      return res.status(response.status).send(`Upstream error ${response.status}: ${txt || response.statusText}`);
     }
 
-    const bodyText = await upstream.text();
-    const isM3U8 = /#EXTM3U/i.test(bodyText);
+    const contentType = response.headers.get("content-type") || "";
+    const bodyText = await response.text();
 
-    if (isM3U8) {
+    // ✅ Detect playlist
+    if (/#EXTM3U/i.test(bodyText)) {
       const lines = bodyText.split(/\r?\n/);
-      const rewritten = lines.map(line => {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith("#")) return line;
 
-        const abs = resolveToAbsolute(trimmed, decodedUrl);
-        // Build rewritten proxy URL (relative to your API)
-        return `/api/proxy?url=${encodeURIComponent(abs)}`;
-      }).join("\n");
+      // ✅ Detect variant playlists (master playlist)
+      const variantLines = lines.filter(l => l.includes("#EXT-X-STREAM-INF"));
+      if (variantLines.length > 0) {
+        let bestUrl = null;
+        let bestRes = 0;
+
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].startsWith("#EXT-X-STREAM-INF")) {
+            const resMatch = lines[i].match(/RESOLUTION=(\d+)x(\d+)/);
+            const urlLine = lines[i + 1]?.trim();
+            if (urlLine) {
+              const absUrl = resolveToAbsolute(urlLine, decodedUrl);
+              const height = resMatch ? parseInt(resMatch[2]) : 0;
+              if (height > bestRes) {
+                bestRes = height;
+                bestUrl = absUrl;
+              }
+            }
+          }
+        }
+
+        if (bestUrl) {
+          // ✅ Auto-select highest quality variant (usually 1080p)
+          const redirect = `/api/proxy?url=${encodeURIComponent(bestUrl)}`;
+          return res.redirect(302, redirect);
+        }
+      }
+
+      // ✅ Regular media playlist, rewrite segments
+      const rewritten = lines
+        .map(line => {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith("#")) return line;
+          const abs = resolveToAbsolute(trimmed, decodedUrl);
+          return `/api/proxy?url=${encodeURIComponent(abs)}`;
+        })
+        .join("\n");
 
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
       return res.status(200).send(rewritten);
     }
 
-    // If it's not a playlist, re-fetch as binary to stream it
+    // ✅ Non-m3u8 (segment files)
     const streamResp = await fetch(decodedUrl, { headers });
-    const contentType = streamResp.headers.get("content-type") || "application/octet-stream";
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Content-Type", contentType);
-    const stream = streamResp.body;
-    if (!stream) return res.status(500).send("Upstream has no body");
-    stream.pipe(res);
-
+    res.setHeader("Content-Type", streamResp.headers.get("content-type") || "application/octet-stream");
+    if (streamResp.body) streamResp.body.pipe(res);
+    else res.status(500).send("No stream data");
   } catch (err) {
     console.error("Proxy error:", err);
     res.status(500).send("Proxy error: " + err.message);
