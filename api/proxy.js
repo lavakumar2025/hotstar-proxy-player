@@ -1,36 +1,46 @@
 import fetch from "node-fetch";
 
-export default async function handler(req, res) {
+export const config = {
+  runtime: "edge", // Important for low-latency streaming
+};
+
+export default async (req) => {
   try {
-    let url = req.query.url;
-    if (!url) {
-      return res.status(400).send("Missing URL");
+    let { searchParams } = new URL(req.url);
+    let fullUrl = searchParams.get("url");
+    if (!fullUrl) {
+      return new Response("Missing URL", { status: 400 });
     }
 
-    // Extract optional cookie from URL
+    // Split cookie if included as |Cookie=
     let cookie = "";
-    if (url.includes("|Cookie=")) {
-      const parts = url.split("|Cookie=");
-      url = parts[0];
+    if (fullUrl.includes("|Cookie=")) {
+      const parts = fullUrl.split("|Cookie=");
+      fullUrl = parts[0];
       cookie = decodeURIComponent(parts[1]);
     }
 
-    const response = await fetch(url, {
+    const response = await fetch(fullUrl, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "User-Agent": "Mozilla/5.0",
         "Referer": "https://www.hotstar.com/",
         "Origin": "https://www.hotstar.com",
-        ...(cookie ? { "Cookie": cookie } : {})
-      }
+        ...(cookie ? { "Cookie": cookie } : {}),
+      },
     });
 
-    // Stream the response
-    res.setHeader("Content-Type", response.headers.get("content-type") || "application/octet-stream");
-    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (!response.ok) {
+      return new Response(`CDN Error: ${response.status}`, { status: response.status });
+    }
 
-    response.body.pipe(res);
+    const newHeaders = new Headers(response.headers);
+    newHeaders.set("Access-Control-Allow-Origin", "*");
+
+    return new Response(response.body, {
+      status: response.status,
+      headers: newHeaders,
+    });
   } catch (err) {
-    console.error("Proxy Error:", err);
-    res.status(500).send("Proxy Error: " + err.message);
+    return new Response("Proxy Error: " + err.message, { status: 500 });
   }
-}
+};
