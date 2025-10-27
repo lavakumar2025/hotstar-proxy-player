@@ -1,25 +1,40 @@
+import express from "express";
 import fetch from "node-fetch";
+import cors from "cors";
 
-export default async function handler(req, res) {
-  const target = req.query.url;
-  if (!target) return res.status(400).send("Missing url param");
+const app = express();
+
+// Enable CORS for all origins
+app.use(cors({
+  origin: "*",
+  methods: ["GET"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
+app.get("/proxy", async (req, res) => {
+  const url = req.query.url;
+  if (!url) return res.status(400).send("Missing URL");
 
   try {
-    const upstream = await fetch(target, {
+    const response = await fetch(url, {
       headers: {
-        "Referer": "https://tamilbulb.world/",
-        "Origin":  "https://tamilbulb.world/",
-        "User-Agent": "Hotstar",
-        "Accept": "*/*"
-      },
-      redirect: "follow"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Referer": "https://www.hotstar.com/",
+        "Origin": "https://www.hotstar.com"
+      }
     });
 
-    const contentType = upstream.headers.get("content-type") || "text/html";
-    const text = await upstream.text();
-    res.setHeader("Content-Type", "text/plain; charset=utf-8"); // send raw HTML as text
-    res.status(upstream.status).send(text);
+    // Copy content-type
+    res.setHeader("Content-Type", response.headers.get("content-type") || "application/octet-stream");
+    // CORS header
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    // Stream response to client
+    response.body.pipe(res);
   } catch (err) {
-    res.status(500).send("fetch error: " + err.message);
+    console.error("Proxy Error:", err);
+    res.status(500).send("Proxy error: " + err.message);
   }
-}
+});
+
+app.listen(3000, () => console.log("Proxy running on port 3000"));
