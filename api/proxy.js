@@ -34,26 +34,19 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       const txt = await response.text().catch(() => "");
-      return res
-        .status(response.status)
-        .send(`Upstream error ${response.status}: ${txt || response.statusText}`);
+      return res.status(response.status).send(`Upstream error ${response.status}: ${txt || response.statusText}`);
     }
 
     const contentType = response.headers.get("content-type") || "";
+    const bodyText = await response.text();
 
-    // Handle HLS playlists (.m3u8)
-    if (contentType.includes("mpegurl") || decodedUrl.endsWith(".m3u8")) {
-      const bodyText = await response.text();
-      if (!/#EXTM3U/i.test(bodyText)) {
-        return res.status(400).send("Not a valid m3u8 playlist");
-      }
-
+    // ✅ Detect playlist
+    if (/#EXTM3U/i.test(bodyText)) {
       const lines = bodyText.split(/\r?\n/);
 
-      // Check for master playlist (with #EXT-X-STREAM-INF)
+      // ✅ Detect variant playlists (master playlist)
       const variantLines = lines.filter(l => l.includes("#EXT-X-STREAM-INF"));
       if (variantLines.length > 0) {
-        // Auto-pick best quality
         let bestUrl = null;
         let bestRes = 0;
 
@@ -73,36 +66,13 @@ export default async function handler(req, res) {
         }
 
         if (bestUrl) {
-          // Fetch highest-quality variant directly (no redirect)
-          const nextResp = await fetch(bestUrl, { headers });
-          if (!nextResp.ok) {
-            return res
-              .status(nextResp.status)
-              .send("Error fetching best quality playlist");
-          }
-
-          const subText = await nextResp.text();
-          const subLines = subText.split(/\r?\n/);
-          const rewritten = subLines
-            .map(line => {
-              const trimmed = line.trim();
-              if (!trimmed || trimmed.startsWith("#")) return line;
-              const abs = resolveToAbsolute(trimmed, bestUrl);
-              return `/api/proxy?url=${encodeURIComponent(abs)}`;
-            })
-            .join("\n");
-
-          res.setHeader("Access-Control-Allow-Origin", "*");
-          res.setHeader(
-            "Content-Type",
-            "application/vnd.apple.mpegurl; charset=utf-8"
-          );
-          res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-          return res.status(200).send(rewritten);
+          // ✅ Auto-select highest quality variant (usually 1080p)
+          const redirect = `/api/proxy?url=${encodeURIComponent(bestUrl)}`;
+          return res.redirect(302, redirect);
         }
       }
 
-      // Simple media playlist (not master)
+      // ✅ Regular media playlist, rewrite segments
       const rewritten = lines
         .map(line => {
           const trimmed = line.trim();
@@ -113,29 +83,16 @@ export default async function handler(req, res) {
         .join("\n");
 
       res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader(
-        "Content-Type",
-        "application/vnd.apple.mpegurl; charset=utf-8"
-      );
-      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
       return res.status(200).send(rewritten);
     }
 
-    // Handle binary segments (.ts, .aac, etc.)
+    // ✅ Non-m3u8 (segment files)
+    const streamResp = await fetch(decodedUrl, { headers });
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader(
-      "Content-Type",
-      response.headers.get("content-type") || "application/octet-stream"
-    );
-    const cacheControl =
-      response.headers.get("cache-control") ||
-      "no-cache, no-store, must-revalidate";
-    res.setHeader("Cache-Control", cacheControl);
-
-    // Stream binary body directly
-    const stream = response.body;
-    if (stream) stream.pipe(res);
-    else res.status(500).send("No data received from upstream");
+    res.setHeader("Content-Type", streamResp.headers.get("content-type") || "application/octet-stream");
+    if (streamResp.body) streamResp.body.pipe(res);
+    else res.status(500).send("No stream data");
   } catch (err) {
     console.error("Proxy error:", err);
     res.status(500).send("Proxy error: " + err.message);
