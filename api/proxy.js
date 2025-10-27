@@ -28,17 +28,17 @@ export default async function handler(req, res) {
 
     const decodedUrl = decodeURIComponent(targetUrl);
     const headers = buildForwardHeaders();
-
     const response = await fetch(decodedUrl, { headers });
+
     if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      return res.status(response.status).send(`Upstream error ${response.status}: ${text || response.statusText}`);
+      const txt = await response.text().catch(() => "");
+      return res.status(response.status).send(`Upstream error ${response.status}: ${txt || response.statusText}`);
     }
 
     const contentType = response.headers.get("content-type") || "";
     const isM3U8 = contentType.includes("mpegurl") || decodedUrl.includes(".m3u8");
 
-    // --- Handle HLS playlist ---
+    // --- Handle HLS playlists ---
     if (isM3U8) {
       const bodyText = await response.text();
       if (!/#EXTM3U/i.test(bodyText)) return res.status(200).send(bodyText);
@@ -46,46 +46,27 @@ export default async function handler(req, res) {
       const lines = bodyText.split(/\r?\n/);
       const variantLines = lines.filter(l => l.includes("#EXT-X-STREAM-INF"));
 
-      // Auto-select best quality (1080p)
+      // --- Master playlist (multiple qualities) ---
       if (variantLines.length > 0) {
-        let bestUrl = null;
-        let bestRes = 0;
-
-        for (let i = 0; i < lines.length; i++) {
-          if (lines[i].startsWith("#EXT-X-STREAM-INF")) {
-            const resMatch = lines[i].match(/RESOLUTION=\d+x(\d+)/);
-            const urlLine = lines[i + 1]?.trim();
-            if (urlLine) {
-              const absUrl = resolveToAbsolute(urlLine, decodedUrl);
-              const height = resMatch ? parseInt(resMatch[1]) : 0;
-              if (height > bestRes) {
-                bestRes = height;
-                bestUrl = absUrl;
-              }
+        const rewrittenLines = lines.map((line, i) => {
+          if (line.startsWith("#EXT-X-STREAM-INF")) {
+            const nextLine = lines[i + 1]?.trim();
+            if (nextLine && !nextLine.startsWith("#")) {
+              const abs = resolveToAbsolute(nextLine, decodedUrl);
+              const proxyUrl = `/api/proxy?url=${encodeURIComponent(abs)}`;
+              lines[i + 1] = proxyUrl;
             }
           }
-        }
+          return line;
+        });
 
-        if (bestUrl) {
-          const nextResp = await fetch(bestUrl, { headers });
-          const subPlaylist = await nextResp.text();
-          const rewritten = subPlaylist
-            .split(/\r?\n/)
-            .map(line => {
-              const trimmed = line.trim();
-              if (!trimmed || trimmed.startsWith("#")) return line;
-              const abs = resolveToAbsolute(trimmed, bestUrl);
-              return `/api/proxy?url=${encodeURIComponent(abs)}`;
-            })
-            .join("\n");
-
-          res.setHeader("Access-Control-Allow-Origin", "*");
-          res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
-          return res.status(200).send(rewritten);
-        }
+        const finalText = rewrittenLines.join("\n");
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+        return res.status(200).send(finalText);
       }
 
-      // Rewrite segment URLs
+      // --- Media playlist (actual .ts chunks) ---
       const rewritten = lines
         .map(line => {
           const trimmed = line.trim();
@@ -100,7 +81,7 @@ export default async function handler(req, res) {
       return res.status(200).send(rewritten);
     }
 
-    // --- Handle TS or media segment ---
+    // --- For .ts or other segments ---
     const streamResp = await fetch(decodedUrl, { headers });
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Cache-Control", "no-cache");
