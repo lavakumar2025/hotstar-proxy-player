@@ -1,11 +1,10 @@
-// api/proxy.js
 import fetch from "node-fetch";
 
 function buildForwardHeaders() {
   return {
     "Origin": "https://jio.yupptv.online",
     "Referer": "https://jio.yupptv.online/",
-    "User-Agent": "Hotstar",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
     "Accept": "*/*",
     "Accept-Language": "en-US,en;q=0.9",
     "Connection": "keep-alive"
@@ -16,8 +15,7 @@ function resolveToAbsolute(line, baseUrl) {
   try {
     if (/^https?:\/\//i.test(line)) return line;
     const base = new URL(baseUrl);
-    const baseDir = base.href.substring(0, base.href.lastIndexOf("/") + 1);
-    return new URL(line, baseDir).href;
+    return new URL(line, base).href;
   } catch {
     return line;
   }
@@ -30,33 +28,36 @@ export default async function handler(req, res) {
 
     const decodedUrl = decodeURIComponent(targetUrl);
     const headers = buildForwardHeaders();
-    const response = await fetch(decodedUrl, { headers });
 
+    const response = await fetch(decodedUrl, { headers });
     if (!response.ok) {
-      const txt = await response.text().catch(() => "");
-      return res.status(response.status).send(`Upstream error ${response.status}: ${txt || response.statusText}`);
+      const text = await response.text().catch(() => "");
+      return res.status(response.status).send(`Upstream error ${response.status}: ${text || response.statusText}`);
     }
 
     const contentType = response.headers.get("content-type") || "";
-    const bodyText = await response.text();
+    const isM3U8 = contentType.includes("mpegurl") || decodedUrl.includes(".m3u8");
 
-    // ✅ Detect playlist
-    if (/#EXTM3U/i.test(bodyText)) {
+    // --- Handle HLS playlist ---
+    if (isM3U8) {
+      const bodyText = await response.text();
+      if (!/#EXTM3U/i.test(bodyText)) return res.status(200).send(bodyText);
+
       const lines = bodyText.split(/\r?\n/);
-
-      // ✅ Detect variant playlists (master playlist)
       const variantLines = lines.filter(l => l.includes("#EXT-X-STREAM-INF"));
+
+      // Auto-select best quality (1080p)
       if (variantLines.length > 0) {
         let bestUrl = null;
         let bestRes = 0;
 
         for (let i = 0; i < lines.length; i++) {
           if (lines[i].startsWith("#EXT-X-STREAM-INF")) {
-            const resMatch = lines[i].match(/RESOLUTION=(\d+)x(\d+)/);
+            const resMatch = lines[i].match(/RESOLUTION=\d+x(\d+)/);
             const urlLine = lines[i + 1]?.trim();
             if (urlLine) {
               const absUrl = resolveToAbsolute(urlLine, decodedUrl);
-              const height = resMatch ? parseInt(resMatch[2]) : 0;
+              const height = resMatch ? parseInt(resMatch[1]) : 0;
               if (height > bestRes) {
                 bestRes = height;
                 bestUrl = absUrl;
@@ -66,13 +67,25 @@ export default async function handler(req, res) {
         }
 
         if (bestUrl) {
-          // ✅ Auto-select highest quality variant (usually 1080p)
-          const redirect = `/api/proxy?url=${encodeURIComponent(bestUrl)}`;
-          return res.redirect(302, redirect);
+          const nextResp = await fetch(bestUrl, { headers });
+          const subPlaylist = await nextResp.text();
+          const rewritten = subPlaylist
+            .split(/\r?\n/)
+            .map(line => {
+              const trimmed = line.trim();
+              if (!trimmed || trimmed.startsWith("#")) return line;
+              const abs = resolveToAbsolute(trimmed, bestUrl);
+              return `/api/proxy?url=${encodeURIComponent(abs)}`;
+            })
+            .join("\n");
+
+          res.setHeader("Access-Control-Allow-Origin", "*");
+          res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+          return res.status(200).send(rewritten);
         }
       }
 
-      // ✅ Regular media playlist, rewrite segments
+      // Rewrite segment URLs
       const rewritten = lines
         .map(line => {
           const trimmed = line.trim();
@@ -87,10 +100,12 @@ export default async function handler(req, res) {
       return res.status(200).send(rewritten);
     }
 
-    // ✅ Non-m3u8 (segment files)
+    // --- Handle TS or media segment ---
     const streamResp = await fetch(decodedUrl, { headers });
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Content-Type", streamResp.headers.get("content-type") || "application/octet-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Content-Type", streamResp.headers.get("content-type") || "video/mp2t");
+
     if (streamResp.body) streamResp.body.pipe(res);
     else res.status(500).send("No stream data");
   } catch (err) {
