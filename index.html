@@ -1,63 +1,53 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Live Stream Player</title>
+  <meta charset="utf-8" />
+  <title>Smart Proxy Player</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <style>
     body {
-      background: #111;
+      background: #000;
+      color: #fff;
       display: flex;
-      justify-content: center;
+      flex-direction: column;
       align-items: center;
+      justify-content: center;
       height: 100vh;
-      margin: 0;
     }
-    video {
-      width: 90%;
-      max-width: 1280px;
-      border-radius: 10px;
-      box-shadow: 0 0 20px rgba(0,0,0,0.7);
-    }
+    video { width: 80%; border-radius: 10px; }
+    select { margin-top: 10px; padding: 5px; }
   </style>
 </head>
 <body>
+  <video id="video" controls></video>
+  <select id="qualitySelect"></select>
 
-<video id="player" controls autoplay></video>
+  <script>
+    const video = document.getElementById('video');
+    const qualitySelect = document.getElementById('qualitySelect');
+    const src = 'https://hotstar-proxy-player.vercel.app/api/proxy?url=' + 
+      encodeURIComponent('https://bb8.40vloox7r9.workers.dev/tamilbulb/live/stream.m3u8?id=84733b8bb5');
 
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.0/dist/hls.min.js"></script>
-<script>
-  const video = document.getElementById('player');
+    if (Hls.isSupported()) {
+      const hls = new Hls();
+      hls.loadSource(src);
+      hls.attachMedia(video);
 
-  // Master playlist URL through your proxy
-  const masterUrl = "https://hotstar-proxy-player.vercel.app/api/proxy?url=" + 
-                    encodeURIComponent("https://bb4.xojef51292.workers.dev/tamilbulb/live/stream.m3u8?id=84733b8bb5");
-
-  if (Hls.isSupported()) {
-    const hls = new Hls({
-      // Optional: retry config
-      xhrSetup: (xhr, url) => {
-        xhr.withCredentials = false; // ensure no credentials
-      }
-    });
-
-    // Intercept all .ts and .m3u8 requests to go through proxy
-    hls.on(Hls.Events.FRAG_LOADING, (event, data) => {
-      data.url = "https://hotstar-proxy-player.vercel.app/api/proxy?url=" + encodeURIComponent(data.url);
-    });
-
-    hls.loadSource(masterUrl);
-    hls.attachMedia(video);
-    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      video.play();
-    });
-
-  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-    // For Safari native HLS
-    video.src = masterUrl;
-    video.addEventListener('loadedmetadata', () => video.play());
-  }
-</script>
-
+      hls.on(Hls.Events.MANIFEST_PARSED, function (_, data) {
+        qualitySelect.innerHTML = '';
+        data.levels.forEach((level, index) => {
+          const opt = document.createElement('option');
+          opt.value = index;
+          opt.textContent = `${level.height}p`;
+          qualitySelect.appendChild(opt);
+        });
+        qualitySelect.addEventListener('change', () => {
+          hls.currentLevel = parseInt(qualitySelect.value);
+        });
+      });
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = src;
+    }
+  </script>
 </body>
 </html>
