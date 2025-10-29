@@ -1,96 +1,38 @@
-import fetch from "node-fetch";
-
-function buildForwardHeaders() {
-  return {
-    "Origin": "https://jio.yupptv.online",
-    "Referer": "https://jio.yupptv.online/",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-    "Accept": "*/*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Connection": "keep-alive"
-  };
-}
-
-function resolveToAbsolute(line, baseUrl) {
-  try {
-    if (/^https?:\/\//i.test(line)) return line;
-    const base = new URL(baseUrl);
-    return new URL(line, base).href;
-  } catch {
-    return line;
-  }
-}
-
 export default async function handler(req, res) {
   try {
-    const targetUrl = req.query.url || req.url.split("?url=")[1];
-    if (!targetUrl) return res.status(400).send("Missing url parameter");
-
-    const decodedUrl = decodeURIComponent(targetUrl);
-    const headers = buildForwardHeaders();
-    const response = await fetch(decodedUrl, { headers });
-
-    if (!response.ok) {
-      const txt = await response.text().catch(() => "");
-      return res.status(response.status).send(`Upstream error ${response.status}: ${txt || response.statusText}`);
+    const target = req.query.url;
+    if (!target) {
+      return res.status(400).send("Missing ?url parameter");
     }
 
-    const contentType = response.headers.get("content-type") || "";
-    const isM3U8 = contentType.includes("mpegurl") || decodedUrl.includes(".m3u8");
-
-    // --- Handle HLS playlists ---
-    if (isM3U8) {
-      const bodyText = await response.text();
-      if (!/#EXTM3U/i.test(bodyText)) return res.status(200).send(bodyText);
-
-      const lines = bodyText.split(/\r?\n/);
-      const variantLines = lines.filter(l => l.includes("#EXT-X-STREAM-INF"));
-
-      // --- Master playlist (multiple qualities) ---
-      if (variantLines.length > 0) {
-        const rewrittenLines = lines.map((line, i) => {
-          if (line.startsWith("#EXT-X-STREAM-INF")) {
-            const nextLine = lines[i + 1]?.trim();
-            if (nextLine && !nextLine.startsWith("#")) {
-              const abs = resolveToAbsolute(nextLine, decodedUrl);
-              const proxyUrl = `/api/proxy?url=${encodeURIComponent(abs)}`;
-              lines[i + 1] = proxyUrl;
-            }
-          }
-          return line;
-        });
-
-        const finalText = rewrittenLines.join("\n");
-        res.setHeader("Access-Control-Allow-Origin", "*");
-        res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
-        return res.status(200).send(finalText);
-      }
-
-      // --- Media playlist (actual .ts chunks) ---
-      const rewritten = lines
-        .map(line => {
-          const trimmed = line.trim();
-          if (!trimmed || trimmed.startsWith("#")) return line;
-          const abs = resolveToAbsolute(trimmed, decodedUrl);
-          return `/api/proxy?url=${encodeURIComponent(abs)}`;
-        })
-        .join("\n");
-
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
-      return res.status(200).send(rewritten);
+    // Decode and validate the target URL
+    const decoded = decodeURIComponent(target);
+    if (!/^https?:\/\//i.test(decoded)) {
+      return res.status(400).send("Invalid URL");
     }
 
-    // --- For .ts or other segments ---
-    const streamResp = await fetch(decodedUrl, { headers });
+    // Fetch the remote content
+    const response = await fetch(decoded, {
+      headers: {
+        "User-Agent": req.headers["user-agent"] || "Mozilla/5.0",
+        "Referer": req.headers["referer"] || "",
+        "Origin": req.headers["origin"] || "",
+      },
+    });
+
+    // Copy content type and data
+    const contentType = response.headers.get("content-type") || "application/octet-stream";
+    const body = await response.arrayBuffer();
+
+    // Set CORS + cache headers
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Content-Type", streamResp.headers.get("content-type") || "video/mp2t");
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "no-store");
 
-    if (streamResp.body) streamResp.body.pipe(res);
-    else res.status(500).send("No stream data");
-  } catch (err) {
-    console.error("Proxy error:", err);
-    res.status(500).send("Proxy error: " + err.message);
+    res.status(response.status).send(Buffer.from(body));
+  } catch (error) {
+    res.status(500).send("Proxy error: " + error.message);
   }
 }
